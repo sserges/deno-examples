@@ -1,6 +1,11 @@
 import { v4 } from "https://deno.land/std/uuid/mod.ts";
+import { Client } from "https://deno.land/x/postgres/mod.ts";
 
 import { Product } from "../types.ts";
+import { dbCreds } from "../config.ts";
+
+// Init client
+const client = new Client(dbCreds);
 
 let products: Product[] = [
   {
@@ -25,11 +30,35 @@ let products: Product[] = [
 
 // @desc Get all products
 // @route GET /api/v1/products
-const getProducts = ({ response }: { response: any }) => {
-  response.body = {
-    success: true,
-    data: products,
-  };
+const getProducts = async ({ response }: { response: any }) => {
+  try {
+    await client.connect();
+
+    const result = await client.query("SELECT * FROM products");
+
+    const products = new Array();
+
+    result.rows.map((p) => {
+      let obj: any = new Object();
+
+      result.rowDescription.columns.map((el, i) => {
+        obj[el.name] = p[i];
+      });
+
+      products.push(obj);
+    });
+
+    response.body = {
+      success: true,
+      data: products,
+    };
+  } catch (error) {
+    response.status = 500;
+    response.body = {
+      success: false,
+      msg: error.toString(),
+    };
+  }
 };
 
 // @desc Get single product
@@ -60,6 +89,7 @@ const addProduct = async (
   { request, response }: { request: any; response: any },
 ) => {
   const body = await request.body();
+  const product = body.value;
 
   if (!request.hasBody) {
     response.status = 400;
@@ -68,16 +98,30 @@ const addProduct = async (
       msg: "No data",
     };
   } else {
-    const product: Product = body.value;
-    product.id = v4.generate();
+    try {
+      await client.connect();
 
-    products.push(product);
+      const result = await client.query(
+        "INSERT INTO products(name, description, price) VALUES($1, $2, $3)",
+        product.name,
+        product.description,
+        product.price,
+      );
 
-    response.status = 201;
-    response.body = {
-      success: true,
-      data: product,
-    };
+      response.status = 201;
+      response.body = {
+        success: true,
+        data: product,
+      };
+    } catch (error) {
+      response.status = 500;
+      response.body = {
+        success: false,
+        msg: error.toString(),
+      };
+    } finally {
+      await client.end();
+    }
   }
 };
 
