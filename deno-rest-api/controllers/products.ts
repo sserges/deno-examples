@@ -58,28 +58,54 @@ const getProducts = async ({ response }: { response: any }) => {
       success: false,
       msg: error.toString(),
     };
+  } finally {
+    await client.end();
   }
 };
 
 // @desc Get single product
 // @route GET /api/v1/products/:id
-const getProduct = (
+const getProduct = async (
   { params, response }: { params: { id: string }; response: any },
 ) => {
-  const product: Product | undefined = products.find((p) => p.id === params.id);
+  try {
+    await client.connect();
 
-  if (product) {
-    response.status = 200;
-    response.body = {
-      success: true,
-      data: product,
-    };
-  } else {
-    response.status = 404;
+    const result = await client.query(
+      "SELECT * FROM products WHERE id = $1",
+      params.id,
+    );
+
+    if (result.rows.toString() === "") {
+      response.status = 404;
+      response.body = {
+        success: false,
+        msg: `No product with the id of ${params.id}`,
+      };
+
+      return;
+    } else {
+      const product: any = new Object();
+
+      result.rows.map((p) => {
+        result.rowDescription.columns.map((el, i) => {
+          product[el.name] = p[i];
+        });
+      });
+
+      response.body = {
+        success: true,
+        data: product,
+      };
+    }
+  } catch (error) {
+    response.status = 500;
     response.body = {
       success: false,
-      msg: "No product found",
+      msg: error.toString(),
     };
+  } finally {
+    await client.end();
   }
 };
 
